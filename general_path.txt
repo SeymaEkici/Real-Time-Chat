@@ -1,0 +1,16 @@
+1. Backend (FastAPI - WebSocket)
+FastAPI hızlı ve verimli bir framework, WebSocket entegrasyonu sayesinde gerçek zamanlı iletişim sağlayabilir.
+WebSocket ile kullanıcılar arasında sürekli açık bağlantılar kurarak, chat odaları ve mesajlaşma işlemleri anlık yapılabilir.
+
+2. Frontend (React)
+React kullanarak, dinamik ve kullanıcı dostu bir arayüz tasarlayabilirsin. React ile kullanıcıların chat odalarına katılımını, mesajları, bildirimleri ve dosya paylaşımını rahatça yönetebilirsin.
+WebSocket ile gelen mesajları ve bildirimleri React bileşenlerine kolayca entegre edebilirsin.
+
+3. Database (PostgreSQL)
+PostgreSQL, chat geçmişi, kullanıcı bilgileri ve dosya meta verilerini saklamak için çok güçlü bir veritabanıdır. Mesajları ve kullanıcı verilerini verimli bir şekilde yönetebilirsin.
+
+4. Kimlik Doğrulama (JWT)
+JWT ile kullanıcıların güvenli bir şekilde giriş yapmasını sağlarsın. Kimlik doğrulama işlemleri, kullanıcı oturumları ve erişim kontrolü için JWT mükemmel bir seçim.
+
+5. Mesajlaşma (WebSocket, Kafka, RabbitMQ)
+WebSocket real-time mesajlaşma için temel iletişim kanalı olacak. Ancak, yüksek ölçekli uygulamalarda mesajların dağıtımı için Kafka veya RabbitMQ gibi mesajlaşma kuyruğu sistemleri kullanabilirsin. Bu sistemler, mesajların daha verimli bir şekilde iletilmesini ve arka planda yük dengelemesini sağlar.
