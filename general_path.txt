@@ -14,3 +14,11 @@ JWT ile kullanıcıların güvenli bir şekilde giriş yapmasını sağlarsın. 
 
 5. Mesajlaşma (WebSocket, Kafka, RabbitMQ)
 WebSocket real-time mesajlaşma için temel iletişim kanalı olacak. Ancak, yüksek ölçekli uygulamalarda mesajların dağıtımı için Kafka veya RabbitMQ gibi mesajlaşma kuyruğu sistemleri kullanabilirsin. Bu sistemler, mesajların daha verimli bir şekilde iletilmesini ve arka planda yük dengelemesini sağlar.
+
+
+Fisrt steps:
+- Set up your PostgreSQL database and update the connection URL in database.py
+- Implement proper password hashing using bcrypt or Passlib
+- Set up proper routing in your backend using FastAPI's APIRouter
+- Add more features like user registration, chat rooms, and message history
+- Enhance the frontend with styling and more features
