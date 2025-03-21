@@ -5,29 +5,34 @@ import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const [userId, setUserId] = useState(null);
 
-  const handleLogin = (username, accessToken) => {
+  const handleLogin = (username, userId) => {
     setUser(username);
-    setToken(accessToken);
+    setUserId(userId);
   };
 
   const handleLogout = () => {
     setUser(null);
-    setToken(null);
+    setUserId(null);
   };
 
   return (
     <div className="App">
       <header className="App-header">
         <h1>Realtime Chat App</h1>
-        {user && <button onClick={handleLogout}>Logout</button>}
+        {user && (
+          <div className="user-info">
+            <span>Logged in as: {user}</span>
+            <button onClick={handleLogout}>Logout</button>
+          </div>
+        )}
       </header>
       <main>
         {!user ? (
           <Login onLogin={handleLogin} />
         ) : (
-          <ChatRoom username={user} token={token} />
+          <ChatRoom username={user} userId={userId} />
         )}
       </main>
     </div>

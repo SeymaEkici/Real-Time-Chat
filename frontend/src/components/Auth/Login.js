@@ -14,7 +14,7 @@ const Login = ({ onLogin }) => {
       formData.append('username', username);
       formData.append('password', password);
       
-      const response = await fetch('http://localhost:8000/token', {
+      const response = await fetch('http://localhost:8000/login', {
         method: 'POST',
         body: formData,
       });
@@ -24,16 +24,17 @@ const Login = ({ onLogin }) => {
       }
       
       const data = await response.json();
-      onLogin(username, data.access_token);
+      onLogin(username, data.user_id); // Now we pass user_id instead of token
     } catch (err) {
-      setError('Invalid username or password');
+      setError('Login failed. Please try again.');
       console.error(err);
     }
   };
 
   return (
     <div className="login-form">
-      <h2>Login</h2>
+      <h2>Login / Register</h2>
+      <p>Enter your details to login or create a new account</p>
       {error && <div className="error">{error}</div>}
       <form onSubmit={handleSubmit}>
         <div className="form-group">
@@ -54,7 +55,7 @@ const Login = ({ onLogin }) => {
             required
           />
         </div>
-        <button type="submit">Login</button>
+        <button type="submit">Login / Register</button>
       </form>
     </div>
   );

@@ -1,166 +1,119 @@
-from fastapi import FastAPI, WebSocket, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, Depends, HTTPException, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from pydantic import BaseModel
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Dict, List
+from sqlalchemy.orm import Session
+from app.db.database import get_db, User, Message, Room
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# JWT Configuration
-SECRET_KEY = "your_secret_key"  # Change this in production and use environment variables
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# OAuth2PasswordBearer for token authentication
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# Models
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class User(BaseModel):
-    username: str
-    password: str
-
-# Mock database - Replace with actual database
-users_db = {
-    "testuser": {
-        "username": "testuser",
-        "password": "testpassword"  # In production, use hashed passwords
-    }
-}
-
 # Connected WebSocket clients
 active_connections: Dict[str, WebSocket] = {}
 
-# Authentication functions
-def authenticate_user(username: str, password: str):
-    user = users_db.get(username)
+# User routes
+@app.post("/login")
+async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    
     if not user:
-        return False
-    if user["password"] != password:  # In production, use password hashing
-        return False
-    return user
+        # Create new user if not exists (simple signup)
+        user = User(username=username, password=password)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif user.password != password:
+        raise HTTPException(status_code=401, detail="Incorrect password")
+    
+    return {"username": user.username, "user_id": user.id}
 
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+# Room routes
+@app.get("/rooms")
+async def get_rooms(db: Session = Depends(get_db)):
+    rooms = db.query(Room).all()
+    return [{"id": room.id, "name": room.name} for room in rooms]
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user = users_db.get(username)
-    if user is None:
-        raise credentials_exception
-    return user
+@app.post("/rooms")
+async def create_room(name: str = Form(...), db: Session = Depends(get_db)):
+    room = Room(name=name)
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+    return {"id": room.id, "name": room.name}
 
-# Routes
-@app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["username"]}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+# Message routes
+@app.get("/messages/{room_id}")
+async def get_messages(room_id: int, db: Session = Depends(get_db)):
+    messages = db.query(Message).filter(Message.room_id == room_id).all()
+    return [
+        {
+            "id": msg.id,
+            "content": msg.content,
+            "sender": msg.sender.username,
+            "created_at": msg.created_at
+        } 
+        for msg in messages
+    ]
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+# WebSocket endpoints
+@app.websocket("/ws/{client_id}/{room_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str, room_id: int, db: Session = Depends(get_db)):
     await websocket.accept()
-    active_connections[client_id] = websocket
+    
+    # Store connection with room_id
+    connection_key = f"{client_id}_{room_id}"
+    active_connections[connection_key] = websocket
     
     try:
         while True:
-            data = await websocket.receive_text()
-            message = f"Client {client_id}: {data}"
+            # Receive the data from websocket
+            data = await websocket.receive_json()
+            username = data.get("username")
+            message_content = data.get("message")
             
-            # Broadcast the message to all connected clients
-            for connection in active_connections.values():
-                if connection != websocket:  # Don't send back to the sender
-                    await connection.send_text(message)
+            # Get user from database
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                continue
+            
+            # Save message to database
+            message = Message(content=message_content, sender_id=user.id, room_id=room_id)
+            db.add(message)
+            db.commit()
+            
+            # Broadcast message to all clients in the same room
+            formatted_message = {
+                "sender": username,
+                "content": message_content,
+                "timestamp": message.created_at.isoformat()
+            }
+            
+            # Send to all connections in the same room
+            for connection_id, connection in active_connections.items():
+                if connection_id.endswith(f"_{room_id}"):
+                    await connection.send_json(formatted_message)
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        if client_id in active_connections:
-            del active_connections[client_id]
+        if connection_key in active_connections:
+            del active_connections[connection_key]
 
-# Secured WebSocket endpoint (requires authentication)
-@app.websocket("/secured-ws/{client_id}")
-async def secured_websocket_endpoint(websocket: WebSocket, client_id: str, token: str = None):
-    # Extract token from query parameters
-    await websocket.accept()
-    
-    # Verify token
-    try:
-        if not token:
-            await websocket.send_text("Authentication required")
-            await websocket.close()
-            return
-            
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        if not username:
-            await websocket.send_text("Invalid authentication token")
-            await websocket.close()
-            return
-    except JWTError:
-        await websocket.send_text("Invalid authentication token")
-        await websocket.close()
-        return
-    
-    active_connections[client_id] = websocket
-    
-    try:
-        # Send a welcome message
-        await websocket.send_text(f"Welcome {username}!")
-        
-        while True:
-            data = await websocket.receive_text()
-            message = f"User {username} (Client {client_id}): {data}"
-            
-            # Broadcast the message
-            for connection in active_connections.values():
-                if connection != websocket:
-                    await connection.send_text(message)
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        if client_id in active_connections:
-            del active_connections[client_id]
+# Create default room if none exists
+@app.on_event("startup")
+async def startup_event():
+    db = next(get_db())
+    if db.query(Room).count() == 0:
+        default_room = Room(name="General")
+        db.add(default_room)
+        db.commit()
 
 if __name__ == "__main__":
     import uvicorn
